@@ -1,0 +1,84 @@
+server:
+  port: 8080
+  # SSE 长连接不超时
+  servlet:
+    session:
+      timeout: 30m
+
+spring:
+  application:
+    name: medical-agent-platform
+  # 同时引入 web + webflux：web 决定应用类型为 SERVLET（MemoryInterceptor 生效），
+  # webflux 提供 Reactor 使 MVC 控制器可返回 Flux<ServerSentEvent> 流式 SSE。
+  main:
+    web-application-type: servlet
+
+  ai:
+    openai:
+      # 生产请改用环境变量/密钥管理，勿硬编码
+      api-key: ${OPENAI_API_KEY:sk-xxxx}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      chat:
+        options:
+          model: gpt-4o
+          temperature: 0.2
+      embedding:
+        options:
+          model: text-embedding-3-small
+    # ===== Milvus 向量库 =====
+    vectorstore:
+      milvus:
+        client:
+          uri: ${MILVUS_URI:http://127.0.0.1:19530}
+          # token: ${MILVUS_TOKEN:}
+        collection-name: medical_knowledge_v1
+        dimension: 1536
+        vector-field-name: embedding
+        content-field-name: content
+        metadata-field-name: metadata
+        index-type: IVF_FLAT
+        metric-type: COSINE
+        # 开启自动建表
+        initialize-schema: true
+
+  # ===== Elasticsearch：推理审计 =====
+  elasticsearch:
+    uris: ${ES_URIS:http://127.0.0.1:9200}
+    # username: ${ES_USERNAME:}
+    # password: ${ES_PASSWORD:}
+
+# ===== 业务自定义配置 =====
+medical:
+  memory:
+    # Token 压缩阈值（默认 4000），超过则触发摘要压缩
+    compression-token-threshold: 4000
+    # 压缩后保留的最近原始消息条数（不压缩，保证上下文连续）
+    recent-messages-keep: 6
+    # 目标压缩比例（单次请求 Token 降 35%~40%）
+    target-compression-ratio: 0.38
+  rag:
+    # 阶段一：向量 TopK 与 BM25 TopK
+    vector-top-k: 50
+    bm25-top-k: 50
+    # 阶段一后合并去重保留候选数（用于精排）
+    hybrid-candidate-k: 100
+    # 阶段二精排输出
+    rerank-top-k: 5
+    # 切片参数
+    chunk-size: 512
+    chunk-overlap: 50
+    rerank:
+      # cohere | local（本地交叉编码器/语义重排）
+      provider: local
+      cohere:
+        api-key: ${COHERE_API_KEY:}
+        model: rerank-english-v3.0
+  agent:
+    # 多智能体协同：投票/加权汇总阈值
+    confidence-threshold: 0.6
+    # 诊断假设最大数量
+    max-hypotheses: 5
+  think:
+    # reasoning_effort 开启（o 系列模型生效，普通模型自动忽略）
+    reasoning-effort: high
+    sse-timeout-seconds: 120
