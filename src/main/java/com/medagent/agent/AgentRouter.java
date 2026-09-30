@@ -2,6 +2,7 @@ package com.medagent.agent;
 
 import com.medagent.common.Citation;
 import com.medagent.config.MedicalProperties;
+import com.medagent.memory.MemoryContext;
 import com.medagent.prompt.PromptTemplates;
 import com.medagent.think.StageEmitter;
 import com.medagent.think.ThoughtStage;
@@ -41,16 +42,25 @@ public class AgentRouter {
         this.properties = properties;
     }
 
-    public ReActResult react(String userInput, StageEmitter emitter) {
+    /**
+     * 执行多智能体协同推理。
+     *
+     * @param userInput     患者本轮输入
+     * @param emitter       CoT 阶段发射器
+     * @param memoryContext 本轮记忆上下文（关键事实 + 相关历史摘要）；可为 null
+     */
+    public ReActResult react(String userInput, StageEmitter emitter, MemoryContext memoryContext) {
+        MemoryContext context = memoryContext == null ? MemoryContext.empty() : memoryContext;
+
         // ① 分诊
-        TriageResult triage = triageAgent.triage(userInput);
+        TriageResult triage = triageAgent.triage(userInput, context);
         String triageJson = triage.toCompactJson();
         emitter.emit(ThoughtStage.SYMPTOM_DECOMPOSE,
                 "分诊完成：症状=" + triage.getSymptoms() + "；紧急度=" + triage.getUrgency(),
                 triage);
 
         // ② 诊断（含 RAG 证据 + reasoning_effort）
-        DiagnosisOutcome outcome = diagnosisAgent.diagnose(triageJson);
+        DiagnosisOutcome outcome = diagnosisAgent.diagnose(triageJson, context);
         String diagnosisJson = outcome.getDiagnosis().toCompactJson();
         emitter.emit(ThoughtStage.EVIDENCE_RETRIEVAL,
                 outcome.getEvidenceText(), outcome.getCitations());
@@ -62,14 +72,14 @@ public class AgentRouter {
                 outcome.getDiagnosis());
 
         // ③ 生成候选用药方案并【并行】审方
-        List<String> plans = proposeMedicationPlans(diagnosisJson);
-        List<PharmacyResult> votes = parallelReview(diagnosisJson, plans);
+        List<String> plans = proposeMedicationPlans(diagnosisJson);           //开方
+        List<PharmacyResult> votes = parallelReview(diagnosisJson, plans, context);    //异步审方
 
         // ④ 加权汇总 + 最终综合建议
-        double finalConfidence = weightedConfidence(votes);
+        double finalConfidence = weightedConfidence(votes);                        //加权评分
         emitter.emit(ThoughtStage.CONFIDENCE_SCORE,
                 "并行审方投票完成，加权置信度=" + finalConfidence, votes);
-        String finalSuggestion = synthesize(triageJson, diagnosisJson, votes);
+        String finalSuggestion = synthesize(triageJson, diagnosisJson, votes);      //最终建议
         emitter.emit(ThoughtStage.FINAL_SUGGESTION, finalSuggestion,
                 java.util.Map.of("confidence", finalConfidence, "citations", outcome.getCitations()));
 
@@ -77,6 +87,11 @@ public class AgentRouter {
         List<Citation> citations = new ArrayList<>(outcome.getCitations());
 
         return new ReActResult(triage, outcome, votes, finalSuggestion, finalConfidence, citations);
+    }
+
+    /** 兼容旧调用：不带记忆上下文。 */
+    public ReActResult react(String userInput, StageEmitter emitter) {
+        return react(userInput, emitter, MemoryContext.empty());
     }
 
     /** 基于诊断结论提出候选用药方案（每行一个）。 */
@@ -91,14 +106,15 @@ public class AgentRouter {
                 .collect(Collectors.toList());
     }
 
-    /** 并行调用 PharmacyAgent 审方（ReAct 的并行工具调用）。 */
-    private List<PharmacyResult> parallelReview(String diagnosisJson, List<String> plans) {
+    /** 并行调用 PharmacyAgent 审方（工作流并行分支）。 */
+    private List<PharmacyResult> parallelReview(String diagnosisJson, List<String> plans,
+                                                MemoryContext context) {
         if (plans.isEmpty()) {
             return List.of();
         }
         List<CompletableFuture<PharmacyResult>> futures = plans.stream()
                 .map(plan -> CompletableFuture.supplyAsync(
-                        () -> pharmacyAgent.review(diagnosisJson, plan)))
+                        () -> pharmacyAgent.review(diagnosisJson, plan, context)))
                 .toList();
         List<PharmacyResult> votes = new ArrayList<>();
         for (CompletableFuture<PharmacyResult> f : futures) {

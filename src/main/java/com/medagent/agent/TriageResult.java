@@ -7,10 +7,15 @@ import java.util.List;
  */
 public class TriageResult {
 
+    //症状
     private List<String> symptoms;
+    //身体特征
     private List<String> vitalSignsConcern;
+    //持续时间
     private String duration;
+    //危险标识
     private List<String> redFlags;
+    //疑似科室
     private List<String> suspectedDepartments;
     private String urgency; // LOW | MEDIUM | HIGH
 

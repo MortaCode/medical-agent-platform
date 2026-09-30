@@ -6,6 +6,7 @@ import com.medagent.agent.PharmacyResult;
 import com.medagent.agent.ReActResult;
 import com.medagent.agent.TriageResult;
 import com.medagent.common.JsonUtils;
+import com.medagent.memory.MemoryContext;
 import com.medagent.memory.MemoryService;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -26,7 +27,8 @@ import java.util.stream.Collectors;
 /**
  * 深度思考编排服务（CoT + SSE）。
  *
- * <p>将用户请求交由 {@link AgentRouter} 执行 ReAct 多智能体协同，通过 {@link StageEmitter}
+ * <p>先由 {@link MemoryService} 构建本轮记忆上下文（话题分段归档 + 相关性召回 + 跨话题关键事实），
+ * 再交由 {@link AgentRouter} 执行多智能体协同推理；通过 {@link StageEmitter}
  * 把每个 CoT 阶段的中间结果封装为 {@link ThoughtFrame} 逐帧推送；推理结束后把完整摘要
  * （含引用链接与阶段轨迹）写入 Elasticsearch 审计。</p>
  */
@@ -57,8 +59,9 @@ public class ThinkService {
 
         CompletableFuture.runAsync(() -> {
             try {
-                // 0) 长期记忆压缩（超阈值自动摘要，降 35%~40% token）
-                memoryService.compress(conversationId);
+                // 0) 构建本轮记忆上下文：
+                //    归档更早历史（话题分段）→ 抽取跨话题关键事实 → 按相关性召回相关历史
+                MemoryContext memoryContext = memoryService.buildContext(conversationId, userInput);
                 memoryService.remember(conversationId, new UserMessage(userInput));
 
                 // 阶段轨迹（用于审计）
@@ -82,8 +85,8 @@ public class ThinkService {
                             .build());
                 };
 
-                // 1) ReAct 多智能体协同（期间逐阶段发射帧）
-                ReActResult result = agentRouter.react(userInput, emitter);
+                // 1) 多智能体协同推理（携带记忆上下文，期间逐阶段发射帧）
+                ReActResult result = agentRouter.react(userInput, emitter, memoryContext);
 
                 memoryService.remember(conversationId, new AssistantMessage(result.getFinalSuggestion()));
 

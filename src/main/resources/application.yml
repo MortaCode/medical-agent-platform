@@ -50,12 +50,22 @@ spring:
 # ===== 业务自定义配置 =====
 medical:
   memory:
-    # Token 压缩阈值（默认 4000），超过则触发摘要压缩
+    # Token 归档阈值（默认 4000），超过则把更早历史切分为话题段归档
     compression-token-threshold: 4000
-    # 压缩后保留的最近原始消息条数（不压缩，保证上下文连续）
+    # 归档后保留的最近原始消息条数（保证近距指代可解析）
     recent-messages-keep: 6
-    # 目标压缩比例（单次请求 Token 降 35%~40%）
+    # 归档后「固定注入 Token」的目标下降比例（观测指标）
     target-compression-ratio: 0.38
+    # 相邻对话轮相似度低于该值即判定为话题边界（0~1，需按所用 embedding 模型实测调整）
+    topic-boundary-threshold: 0.50
+    # 当前问题与历史话题段相似度低于该值视为无关，本轮不注入该段
+    relevant-segment-min-score: 0.35
+    # 单轮最多注入的历史话题段数量
+    max-relevant-segments: 3
+    # 话题段库保留上限，超出丢弃最旧的段，防止无限增长
+    max-segments-retained: 50
+    # 是否抽取跨话题常驻的医学关键事实（过敏史/慢病/在服药物，始终注入）
+    key-facts-enabled: true
   rag:
     # 阶段一：向量 TopK 与 BM25 TopK
     vector-top-k: 50

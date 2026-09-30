@@ -19,12 +19,24 @@ public class MedicalProperties {
     public Think getThink() { return think; }
 
     public static class Memory {
-        /** Token 压缩阈值，超过触发摘要压缩（默认 4000）。 */
+        /** Token 压缩阈值，超过触发归档（分段摘要），默认 4000。 */
         private int compressionTokenThreshold = 4000;
-        /** 压缩后保留的最近原始消息条数。 */
+        /** 压缩后保留的最近原始消息条数（保证近距指代可解析）。 */
         private int recentMessagesKeep = 6;
-        /** 目标压缩比例（单次请求 Token 降 35%~40%）。 */
+        /** 归档后目标：单次请求注入 Token 相对原始历史的下降比例（观测指标）。 */
         private double targetCompressionRatio = 0.38;
+
+        // ===== 话题分段与相关性召回 =====
+        /** 相邻对话轮相似度低于该值即判定为话题边界（0~1，需按 embedding 模型实测调整）。 */
+        private double topicBoundaryThreshold = 0.50;
+        /** 当前问题与历史话题段的相似度低于该值视为无关，不注入。 */
+        private double relevantSegmentMinScore = 0.35;
+        /** 单轮最多注入的历史话题段数量。 */
+        private int maxRelevantSegments = 3;
+        /** 话题段库保留上限，超出丢弃最旧的段，防止无限增长。 */
+        private int maxSegmentsRetained = 50;
+        /** 是否启用医学关键事实抽取（过敏史/慢病/在服药物，跨话题常驻注入）。 */
+        private boolean keyFactsEnabled = true;
 
         public int getCompressionTokenThreshold() { return compressionTokenThreshold; }
         public void setCompressionTokenThreshold(int v) { this.compressionTokenThreshold = v; }
@@ -32,6 +44,16 @@ public class MedicalProperties {
         public void setRecentMessagesKeep(int v) { this.recentMessagesKeep = v; }
         public double getTargetCompressionRatio() { return targetCompressionRatio; }
         public void setTargetCompressionRatio(double v) { this.targetCompressionRatio = v; }
+        public double getTopicBoundaryThreshold() { return topicBoundaryThreshold; }
+        public void setTopicBoundaryThreshold(double v) { this.topicBoundaryThreshold = v; }
+        public double getRelevantSegmentMinScore() { return relevantSegmentMinScore; }
+        public void setRelevantSegmentMinScore(double v) { this.relevantSegmentMinScore = v; }
+        public int getMaxRelevantSegments() { return maxRelevantSegments; }
+        public void setMaxRelevantSegments(int v) { this.maxRelevantSegments = v; }
+        public int getMaxSegmentsRetained() { return maxSegmentsRetained; }
+        public void setMaxSegmentsRetained(int v) { this.maxSegmentsRetained = v; }
+        public boolean isKeyFactsEnabled() { return keyFactsEnabled; }
+        public void setKeyFactsEnabled(boolean v) { this.keyFactsEnabled = v; }
     }
 
     public static class Rag {

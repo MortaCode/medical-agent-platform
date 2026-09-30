@@ -3,6 +3,7 @@ package com.medagent.agent;
 import com.medagent.common.Citation;
 import com.medagent.common.JsonUtils;
 import com.medagent.config.MedicalProperties;
+import com.medagent.memory.MemoryContext;
 import com.medagent.prompt.PromptTemplates;
 import com.medagent.rag.RagService;
 import com.medagent.rag.RetrievalCandidate;
@@ -34,9 +35,16 @@ public class DiagnosisAgent {
         this.reasoningEffort = properties.getThink().getReasoningEffort();
     }
 
+    /**
+     * 鉴别诊断（工作流第二步）。
+     *
+     * @param triageJson    分诊结果 JSON
+     * @param memoryContext 本轮记忆上下文（关键事实 + 相关历史摘要）；可为 null
+     */
     @Tool(name = "diagnose",
           description = "基于循证医学对分诊结果进行鉴别诊断，返回诊断假设、证据引用与置信度")
-    public DiagnosisOutcome diagnose(String triageJson) {
+    public DiagnosisOutcome diagnose(String triageJson, MemoryContext memoryContext) {
+        MemoryContext context = memoryContext == null ? MemoryContext.empty() : memoryContext;
         TriageResult triage = JsonUtils.fromJson(JsonUtils.cleanJson(triageJson), TriageResult.class);
         if (triage == null) {
             triage = new TriageResult();
@@ -48,7 +56,8 @@ public class DiagnosisAgent {
         String evidenceText = ragService.toEvidenceText(evidence);
         List<Citation> citations = toCitations(evidence);
 
-        String prompt = String.format(PromptTemplates.DIAGNOSIS, triage.toCompactJson(), evidenceText);
+        String prompt = String.format(PromptTemplates.DIAGNOSIS,
+                context.toPromptBlock(), triage.toCompactJson(), evidenceText);
         OpenAiChatOptions options = OpenAiChatOptions.builder()
                 .reasoningEffort(reasoningEffort)
                 .build();
@@ -63,6 +72,11 @@ public class DiagnosisAgent {
             result = new DiagnosisResult();
         }
         return new DiagnosisOutcome(result, citations, evidenceText);
+    }
+
+    /** 兼容旧调用：不带记忆上下文。 */
+    public DiagnosisOutcome diagnose(String triageJson) {
+        return diagnose(triageJson, MemoryContext.empty());
     }
 
     private String buildQuery(TriageResult triage) {

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>医疗智能体协同推理平台 V1.0</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+  <!-- ==================== 顶部栏：软件标识 + 会话/连接状态 ==================== -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">医疗智能体协同推理平台</span>
+      <span class="brand-ver">V1.0</span>
+    </div>
+    <div class="session">
+      <span class="conn-dot" id="conn-dot"></span>
+      <span class="conn-text" id="conn-text">未连接</span>
+      <span class="session-id" id="session-id">会话：—</span>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <!-- ==================== 主区：深度思考逐帧渲染 ==================== -->
+    <section class="pane pane-main">
+
+      <div class="pane-head">
+        <h1>深度思考过程（CoT 逐帧渲染）</h1>
+        <p class="run-meta" id="run-meta">POST /api/think · SSE 流式推送 · 待发起</p>
+      </div>
+
+      <!-- 提问区：输入主诉并发起一次流式推理 -->
+      <form class="ask" id="ask-form" autocomplete="off">
+        <input class="ask-input" id="query-input" type="text"
+               placeholder="请输入患者主诉，例如：患者男，45岁，发热三天伴咽痛，体温最高38.5度">
+        <button class="btn btn-primary" id="submit-btn" type="submit">开始推理</button>
+        <button class="btn" id="stop-btn" type="button" disabled>中止</button>
+        <label class="demo-toggle" title="后端未就绪时回放内置脚本化帧序列，便于离线演示与验收">
+          <input type="checkbox" id="demo-toggle"> 演示模式
+        </label>
+      </form>
+
+      <!-- 当前问题回显 -->
+      <div class="question" id="question-box" hidden></div>
+
+      <!-- 六阶段思考帧容器：由 thought-render.js 逐帧追加 -->
+      <ol class="stages" id="stage-list"></ol>
+
+      <!-- 最终建议卡（与第 6 帧共用数据，视觉上单独强调） -->
+      <div class="final" id="final-box" hidden>
+        <div class="final-head">
+          <span class="final-no">6</span>
+          <span class="final-title">最终建议</span>
+          <span class="stage-tag">FINAL_SUGGESTION</span>
+          <span class="final-conf" id="final-conf"></span>
+        </div>
+        <div class="final-text" id="final-text"></div>
+        <div class="final-cite" id="final-cite"></div>
+      </div>
+
+      <!-- 异常/中止提示 -->
+      <div class="notice" id="notice-box" hidden></div>
+
+    </section>
+
+    <!-- ==================== 侧栏：置信度 / 引用 / 记忆 / 审计 / 事件流 ==================== -->
+    <aside class="pane pane-side">
+
+      <div class="card">
+        <div class="card-title">加权置信度</div>
+        <div class="card-big"><span id="stat-confidence">—</span>
+          <small>阈值 <span id="stat-threshold">0.60</span></small>
+        </div>
+        <div class="card-bar"><i id="stat-confidence-bar" style="width:0%"></i></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">本轮证据 / 引用</div>
+        <div class="card-big"><span id="stat-evidence">0</span>
+          <small>条证据 · <span id="stat-citations">0</span> 条引用</small>
+        </div>
+        <div class="card-sub" id="stat-evidence-detail">尚未检索</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">会话记忆压缩</div>
+        <div class="card-big2" id="stat-memory">未触发</div>
+        <div class="card-sub" id="stat-memory-detail">历史 0 / 4000 token</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">推理审计（Elasticsearch）</div>
+        <div class="card-kv" id="stat-audit">
+          <div>id：—</div>
+          <div>finalConfidence：—</div>
+          <div>stageTrace：—</div>
+          <div>createdAt：—</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">SSE 事件流（实时）</div>
+        <div class="terminal" id="event-log">
+          <div class="term-line term-muted">waiting for stream…</div>
+        </div>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- 按依赖顺序加载：配置 -> 传输 -> 解析 -> 渲染 -> 状态 -> 演示数据 -> 主控 -->
+  <script src="js/config.js"></script>
+  <script src="js/sse-client.js"></script>
+  <script src="js/frame-parser.js"></script>
+  <script src="js/thought-render.js"></script>
+  <script src="js/session-store.js"></script>
+  <script src="js/demo-frames.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
